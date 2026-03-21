@@ -1,0 +1,160 @@
+openapi: 3.0.3
+info:
+  title: sharedCanvas API
+  version: 1.0.0
+  description: |
+    OpenAPI description of the currently implemented HTTP API for sharedCanvas.
+    The UI is served separately as static content; this document only describes
+    the JSON API.
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+tags:
+  - name: lines
+    description: Create line segments on the shared canvas
+paths:
+  /api/lines:
+    post:
+      tags:
+        - lines
+      summary: Create a line segment
+      description: |
+        Stores a single line segment.
+
+        The request body must contain exactly one JSON object. Unknown fields are
+        rejected, and the request body is limited to 1 MiB.
+      operationId: createLine
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Line'
+            examples:
+              basic:
+                summary: Valid line segment
+                value:
+                  x1: 10
+                  y1: 20
+                  x2: 30
+                  y2: 40
+                  color: '#112233'
+                  width: 5
+      responses:
+        '201':
+          description: Line stored successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateLineResponse'
+              examples:
+                success:
+                  value:
+                    status: ok
+                    line:
+                      x1: 10
+                      y1: 20
+                      x2: 30
+                      y2: 40
+                      color: '#112233'
+                      width: 5
+        '400':
+          description: Invalid JSON payload or validation failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidJson:
+                  summary: Malformed JSON or unknown fields
+                  value:
+                    error: invalid JSON payload
+                multipleObjects:
+                  summary: Multiple JSON objects in one request body
+                  value:
+                    error: request body must contain a single JSON object
+                validation:
+                  summary: Coordinate outside allowed range
+                  value:
+                    error: x1 must be between 0 and 800
+        '405':
+          description: Method not allowed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: method must be POST
+        '500':
+          description: The server failed to persist the line
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: failed to save line
+components:
+  schemas:
+    Line:
+      type: object
+      additionalProperties: false
+      required:
+        - x1
+        - y1
+        - x2
+        - y2
+        - color
+        - width
+      properties:
+        x1:
+          type: integer
+          minimum: 0
+          maximum: 800
+          description: Starting X coordinate on the canvas
+        y1:
+          type: integer
+          minimum: 0
+          maximum: 600
+          description: Starting Y coordinate on the canvas
+        x2:
+          type: integer
+          minimum: 0
+          maximum: 800
+          description: Ending X coordinate on the canvas
+        y2:
+          type: integer
+          minimum: 0
+          maximum: 600
+          description: Ending Y coordinate on the canvas
+        color:
+          type: string
+          pattern: '^#[0-9a-fA-F]{6}$'
+          description: Line color as a 6-digit hexadecimal RGB value
+          example: '#112233'
+        width:
+          type: integer
+          minimum: 1
+          maximum: 50
+          description: Stroke width in pixels
+    CreateLineResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - line
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+        line:
+          $ref: '#/components/schemas/Line'
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Human-readable error message

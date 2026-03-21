@@ -6,9 +6,9 @@ description:This agent runs the application.
 hooks:
   PostToolUse:
     - type: command
-      command: "go run ./src/main.go"
+      command: "go run ."
 ---
 
 <!-- Tip: Use /create-agent in chat to generate content with agent assistance -->
 
-This agent runs the application from project root directory.
+This agent runs the application from src directory.
