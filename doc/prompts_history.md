@@ -4,3 +4,5 @@
 2. now add go application that host this file
 3. plan REST API for drawing line from X1, Y1, to X2, Y2
 4. Add Open API file describing current API, put shi in /doc/openapi/ folder
+5. Plan new API method for receiveing stored lines in order.
+6. Now we need to modify script in index.html that old lines are loaded and drawn on page load

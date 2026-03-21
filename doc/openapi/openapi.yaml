@@ -14,6 +14,47 @@ tags:
     description: Create line segments on the shared canvas
 paths:
   /api/lines:
+    get:
+      tags:
+        - lines
+      summary: List all line segments
+      description: |
+        Retrieves all stored line segments in insertion order.
+      operationId: listLines
+      responses:
+        '200':
+          description: Lines retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListLinesResponse'
+              examples:
+                success:
+                  value:
+                    status: ok
+                    data:
+                      - id: 1
+                        x1: 10
+                        y1: 20
+                        x2: 30
+                        y2: 40
+                        color: '#112233'
+                        width: 5
+                      - id: 2
+                        x1: 50
+                        y1: 60
+                        x2: 70
+                        y2: 80
+                        color: '#aabbcc'
+                        width: 3
+        '500':
+          description: The server failed to retrieve lines
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: failed to list lines
     post:
       tags:
         - lines
@@ -84,7 +125,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
               example:
-                error: method must be POST
+                error: method must be GET or POST
         '500':
           description: The server failed to persist the line
           content:
@@ -99,6 +140,7 @@ components:
       type: object
       additionalProperties: false
       required:
+        - id
         - x1
         - y1
         - x2
@@ -106,6 +148,10 @@ components:
         - color
         - width
       properties:
+        id:
+          type: integer
+          minimum: 1
+          description: Unique line identifier assigned by the server
         x1:
           type: integer
           minimum: 0
@@ -149,6 +195,22 @@ components:
             - ok
         line:
           $ref: '#/components/schemas/Line'
+    ListLinesResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - data
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Line'
+          description: Array of line segments in insertion order
     ErrorResponse:
       type: object
       additionalProperties: false

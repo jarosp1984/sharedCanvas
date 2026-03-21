@@ -21,7 +21,7 @@ func main() {
 		log.Fatal("Server failed to initialize store:", err)
 	}
 
-	http.HandleFunc("/api/lines", NewCreateLineHandler(store))
+	http.HandleFunc("/api/lines", NewLinesHandler(store))
 
 	// Serve static files from the src directory
 	fs := http.FileServer(http.Dir("../static"))

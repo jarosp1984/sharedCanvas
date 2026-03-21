@@ -169,6 +169,31 @@
             }
         }
 
+        async function loadStoredLines() {
+            try {
+                const response = await fetch('/api/lines', {
+                    method: 'GET'
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API request failed with status ${response.status}`);
+                }
+
+                const payload = await response.json();
+                const lines = Array.isArray(payload.data) ? payload.data : [];
+
+                // Draw in ascending ID order to preserve draw sequence.
+                lines
+                    .slice()
+                    .sort((a, b) => (a.id || 0) - (b.id || 0))
+                    .forEach((line) => {
+                        drawLineSegment(line.x1, line.y1, line.x2, line.y2, line.color, line.width);
+                    });
+            } catch (error) {
+                console.error('Failed to load stored lines:', error);
+            }
+        }
+
         // Get mouse position relative to canvas
         function getMousePos(e) {
             const rect = canvas.getBoundingClientRect();
@@ -223,6 +248,8 @@
         canvas.addEventListener('contextmenu', (e) => {
             e.preventDefault();
         });
+
+        loadStoredLines();
     </script>
 </body>
 </html>

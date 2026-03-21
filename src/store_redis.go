@@ -9,6 +9,7 @@ import (
 )
 
 const redisLinesKey = "sharedcanvas:lines"
+const redisNextIDKey = "sharedcanvas:next_id"
 
 type RedisLineStore struct {
 	client *redis.Client
@@ -23,7 +24,23 @@ func NewRedisLineStore(ctx context.Context, options redis.Options) (*RedisLineSt
 	return &RedisLineStore{client: client}, nil
 }
 
-func (store *RedisLineStore) SaveLine(ctx context.Context, line Line) error {
+func (store *RedisLineStore) NextLineID(ctx context.Context) (int, error) {
+	id, err := store.client.Incr(ctx, redisNextIDKey).Result()
+	if err != nil {
+		return 0, fmt.Errorf("increment next id: %w", err)
+	}
+
+	return int(id), nil
+}
+
+func (store *RedisLineStore) SaveLine(ctx context.Context, line *Line) error {
+	id, err := store.NextLineID(ctx)
+	if err != nil {
+		return err
+	}
+
+	line.ID = id
+
 	payload, err := json.Marshal(line)
 	if err != nil {
 		return fmt.Errorf("marshal line: %w", err)

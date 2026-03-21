@@ -16,6 +16,7 @@ const (
 var colorPattern = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 
 type Line struct {
+	ID    int    `json:"id"`
 	X1    int    `json:"x1"`
 	Y1    int    `json:"y1"`
 	X2    int    `json:"x2"`

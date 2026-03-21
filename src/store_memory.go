@@ -6,19 +6,39 @@ import (
 )
 
 type MemoryLineStore struct {
-	mu    sync.Mutex
-	lines []Line
+	mu     sync.Mutex
+	lines  []Line
+	nextID int
 }
 
 func NewMemoryLineStore() *MemoryLineStore {
-	return &MemoryLineStore{}
+	return &MemoryLineStore{
+		nextID: 1,
+	}
 }
 
-func (store *MemoryLineStore) SaveLine(_ context.Context, line Line) error {
+func (store *MemoryLineStore) NextLineID(_ context.Context) (int, error) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 
-	store.lines = append(store.lines, line)
+	id := store.nextID
+	store.nextID++
+
+	return id, nil
+}
+
+func (store *MemoryLineStore) SaveLine(ctx context.Context, line *Line) error {
+	id, err := store.NextLineID(ctx)
+	if err != nil {
+		return err
+	}
+
+	line.ID = id
+
+	store.mu.Lock()
+	defer store.mu.Unlock()
+
+	store.lines = append(store.lines, *line)
 
 	return nil
 }

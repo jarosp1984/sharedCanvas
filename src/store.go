@@ -11,8 +11,9 @@ import (
 )
 
 type LineStore interface {
-	SaveLine(ctx context.Context, line Line) error
+	SaveLine(ctx context.Context, line *Line) error
 	ListLines(ctx context.Context) ([]Line, error)
+	NextLineID(ctx context.Context) (int, error)
 }
 
 func NewLineStoreFromEnv(ctx context.Context) (LineStore, error) {
