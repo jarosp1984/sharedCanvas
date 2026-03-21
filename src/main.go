@@ -14,7 +14,7 @@ func main() {
 	}
 
 	// Serve static files from the src directory
-	fs := http.FileServer(http.Dir("./src"))
+	fs := http.FileServer(http.Dir("./static"))
 	http.Handle("/", fs)
 
 	log.Printf("Server starting on http://localhost:%s", port)
