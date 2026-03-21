@@ -120,6 +120,7 @@
         let isDrawing = false;
         let lastX = 0;
         let lastY = 0;
+        let hasReportedApiError = false;
 
         // Configure context
         ctx.lineCap = 'round';
@@ -134,6 +135,39 @@
         clearBtn.addEventListener('click', () => {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
         });
+
+        function drawLineSegment(x1, y1, x2, y2, color, width) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = width;
+
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+        }
+
+        async function submitLineSegment(line) {
+            try {
+                const response = await fetch('/api/lines', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(line)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API request failed with status ${response.status}`);
+                }
+
+                hasReportedApiError = false;
+            } catch (error) {
+                if (!hasReportedApiError) {
+                    console.error('Failed to persist line segment:', error);
+                    hasReportedApiError = true;
+                }
+            }
+        }
 
         // Get mouse position relative to canvas
         function getMousePos(e) {
@@ -157,14 +191,19 @@
             if (!isDrawing) return;
 
             const pos = getMousePos(e);
+            const color = colorPicker.value;
+            const width = Number(brushSize.value);
+            const line = {
+                x1: Math.round(lastX),
+                y1: Math.round(lastY),
+                x2: Math.round(pos.x),
+                y2: Math.round(pos.y),
+                color,
+                width
+            };
             
-            ctx.strokeStyle = colorPicker.value;
-            ctx.lineWidth = brushSize.value;
-            
-            ctx.beginPath();
-            ctx.moveTo(lastX, lastY);
-            ctx.lineTo(pos.x, pos.y);
-            ctx.stroke();
+            drawLineSegment(line.x1, line.y1, line.x2, line.y2, color, width);
+            submitLineSegment(line);
             
             lastX = pos.x;
             lastY = pos.y;

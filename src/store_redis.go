@@ -1,0 +1,55 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+
+	"github.com/redis/go-redis/v9"
+)
+
+const redisLinesKey = "sharedcanvas:lines"
+
+type RedisLineStore struct {
+	client *redis.Client
+}
+
+func NewRedisLineStore(ctx context.Context, options redis.Options) (*RedisLineStore, error) {
+	client := newRedisClient(options)
+	if err := client.Ping(ctx).Err(); err != nil {
+		return nil, fmt.Errorf("connect redis: %w", err)
+	}
+
+	return &RedisLineStore{client: client}, nil
+}
+
+func (store *RedisLineStore) SaveLine(ctx context.Context, line Line) error {
+	payload, err := json.Marshal(line)
+	if err != nil {
+		return fmt.Errorf("marshal line: %w", err)
+	}
+
+	if err := store.client.RPush(ctx, redisLinesKey, payload).Err(); err != nil {
+		return fmt.Errorf("save line: %w", err)
+	}
+
+	return nil
+}
+
+func (store *RedisLineStore) ListLines(ctx context.Context) ([]Line, error) {
+	items, err := store.client.LRange(ctx, redisLinesKey, 0, -1).Result()
+	if err != nil {
+		return nil, fmt.Errorf("list lines: %w", err)
+	}
+
+	lines := make([]Line, 0, len(items))
+	for _, item := range items {
+		var line Line
+		if err := json.Unmarshal([]byte(item), &line); err != nil {
+			return nil, fmt.Errorf("decode line: %w", err)
+		}
+		lines = append(lines, line)
+	}
+
+	return lines, nil
+}
