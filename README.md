@@ -10,7 +10,7 @@ Memory-backed mode is the default:
 cd src && go run .
 ```
 
-Redis-backed mode uses the Redis instance from [docker-compose.yml](/home/jarek/projects/sharedCanvas/docker-compose.yml):
+Redis-backed mode uses the Redis instance from [docker-compose.yml](docker-compose.yml):
 
 ```bash
 docker compose up -d redis
@@ -30,4 +30,4 @@ The app serves the UI at `http://localhost:8080`.
 
 ## REST API
 
-OpenAPI description: [doc/openapi/openapi.yaml](/home/jarek/projects/sharedCanvas/doc/openapi/openapi.yaml)
+OpenAPI description: [doc/openapi/openapi.yaml](./doc/openapi/openapi.yaml)
