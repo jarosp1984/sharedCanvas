@@ -70,3 +70,19 @@ func (store *RedisLineStore) ListLines(ctx context.Context) ([]Line, error) {
 
 	return lines, nil
 }
+
+func (store *RedisLineStore) ListLinesSince(ctx context.Context, sinceID int) ([]Line, error) {
+	lines, err := store.ListLines(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	filtered := make([]Line, 0, len(lines))
+	for _, line := range lines {
+		if line.ID > sinceID {
+			filtered = append(filtered, line)
+		}
+	}
+
+	return filtered, nil
+}

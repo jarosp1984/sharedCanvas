@@ -1,6 +1,6 @@
 # sharedCanvas
 
-Canvas for shared drawings.
+Canvas for shared drawings. This is a test project for exploring agentic development with GitHub Copilot.
 
 ## Run
 
@@ -22,7 +22,7 @@ The app serves the UI at `http://localhost:8080`.
 
 ## Environment variables:
 
-- `PORT`: HTTP port, defaults to `8080`
+- `SC_PORT`: HTTP port, defaults to `8080`
 - `LINE_STORE`: `memory` or `redis`, defaults to `memory`
 - `REDIS_ADDR`: Redis host and port, defaults to `localhost:6379`
 - `REDIS_PASSWORD`: optional Redis password
@@ -31,3 +31,8 @@ The app serves the UI at `http://localhost:8080`.
 ## REST API
 
 OpenAPI description: [doc/openapi/openapi.yaml](./doc/openapi/openapi.yaml)
+
+## Prompts history
+
+History of major propmpts used in project development (AI backend: Github Copilot): 
+[doc/prompts_history.md](./doc/prompts_history.md)

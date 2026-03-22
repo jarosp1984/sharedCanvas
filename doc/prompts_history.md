@@ -6,3 +6,4 @@
 4. Add Open API file describing current API, put shi in /doc/openapi/ folder
 5. Plan new API method for receiveing stored lines in order.
 6. Now we need to modify script in index.html that old lines are loaded and drawn on page load
+7. Plan the changes to enable auto update of data: all other clients should get newly added lines every 1 second.

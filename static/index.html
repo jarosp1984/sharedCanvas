@@ -121,6 +121,7 @@
         let lastX = 0;
         let lastY = 0;
         let hasReportedApiError = false;
+        let maxRenderedLineID = 0;
 
         // Configure context
         ctx.lineCap = 'round';
@@ -160,6 +161,12 @@
                     throw new Error(`API request failed with status ${response.status}`);
                 }
 
+                const payload = await response.json();
+                const persistedLineID = Number(payload?.line?.id);
+                if (Number.isFinite(persistedLineID) && persistedLineID > maxRenderedLineID) {
+                    maxRenderedLineID = persistedLineID;
+                }
+
                 hasReportedApiError = false;
             } catch (error) {
                 if (!hasReportedApiError) {
@@ -167,6 +174,24 @@
                     hasReportedApiError = true;
                 }
             }
+        }
+
+        function drawStoredLines(lines) {
+            lines
+                .slice()
+                .sort((a, b) => (a.id || 0) - (b.id || 0))
+                .forEach((line) => {
+                    const lineID = Number(line.id) || 0;
+                    if (lineID > 0 && lineID <= maxRenderedLineID) {
+                        return;
+                    }
+
+                    drawLineSegment(line.x1, line.y1, line.x2, line.y2, line.color, line.width);
+
+                    if (lineID > maxRenderedLineID) {
+                        maxRenderedLineID = lineID;
+                    }
+                });
         }
 
         async function loadStoredLines() {
@@ -182,15 +207,31 @@
                 const payload = await response.json();
                 const lines = Array.isArray(payload.data) ? payload.data : [];
 
-                // Draw in ascending ID order to preserve draw sequence.
-                lines
-                    .slice()
-                    .sort((a, b) => (a.id || 0) - (b.id || 0))
-                    .forEach((line) => {
-                        drawLineSegment(line.x1, line.y1, line.x2, line.y2, line.color, line.width);
-                    });
+                drawStoredLines(lines);
             } catch (error) {
                 console.error('Failed to load stored lines:', error);
+            }
+        }
+
+        async function pollNewLines() {
+            try {
+                const response = await fetch(`/api/lines?since=${maxRenderedLineID}`, {
+                    method: 'GET'
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API request failed with status ${response.status}`);
+                }
+
+                const payload = await response.json();
+                const lines = Array.isArray(payload.data) ? payload.data : [];
+                if (lines.length === 0) {
+                    return;
+                }
+
+                drawStoredLines(lines);
+            } catch (error) {
+                console.error('Failed to poll new lines:', error);
             }
         }
 
@@ -249,7 +290,9 @@
             e.preventDefault();
         });
 
-        loadStoredLines();
+        loadStoredLines().finally(() => {
+            setInterval(pollNewLines, 1000);
+        });
     </script>
 </body>
 </html>

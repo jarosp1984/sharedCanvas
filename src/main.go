@@ -11,7 +11,7 @@ func main() {
 	ctx := context.Background()
 
 	// Get port from environment variable or use default
-	port := os.Getenv("PORT")
+	port := os.Getenv("SC_PORT")
 	if port == "" {
 		port = "8080"
 	}

@@ -137,3 +137,58 @@ func TestGetLinesRejectsNonGetMethod(t *testing.T) {
 		t.Fatalf("expected status %d, got %d", http.StatusMethodNotAllowed, response.Code)
 	}
 }
+
+func TestGetLinesSinceReturnsOnlyNewerLines(t *testing.T) {
+	store := NewMemoryLineStore()
+	handler := NewLinesHandler(store)
+
+	for i := 0; i < 3; i++ {
+		postReq := httptest.NewRequest(http.MethodPost, "/api/lines", strings.NewReader(`{"x1":10,"y1":20,"x2":30,"y2":40,"color":"#112233","width":5}`))
+		postResp := httptest.NewRecorder()
+		handler.ServeHTTP(postResp, postReq)
+
+		if postResp.Code != http.StatusCreated {
+			t.Fatalf("failed to post line: %d", postResp.Code)
+		}
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/lines?since=1", nil)
+	getResp := httptest.NewRecorder()
+
+	handler.ServeHTTP(getResp, getReq)
+
+	if getResp.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, getResp.Code)
+	}
+
+	body := getResp.Body.String()
+	if strings.Contains(body, `"id":1`) {
+		t.Fatalf("expected id 1 to be filtered out, got %s", body)
+	}
+
+	if !strings.Contains(body, `"id":2`) {
+		t.Fatalf("expected id 2 in response, got %s", body)
+	}
+
+	if !strings.Contains(body, `"id":3`) {
+		t.Fatalf("expected id 3 in response, got %s", body)
+	}
+}
+
+func TestGetLinesSinceRejectsInvalidValue(t *testing.T) {
+	store := NewMemoryLineStore()
+	handler := NewLinesHandler(store)
+
+	request := httptest.NewRequest(http.MethodGet, "/api/lines?since=-1", nil)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, response.Code)
+	}
+
+	if !strings.Contains(response.Body.String(), `"error":"since must be a non-negative integer"`) {
+		t.Fatalf("expected validation error in response, got %s", response.Body.String())
+	}
+}

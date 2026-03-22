@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 )
 
 func NewLinesHandler(store LineStore) http.HandlerFunc {
@@ -55,7 +56,25 @@ func handlePostLine(writer http.ResponseWriter, request *http.Request, store Lin
 }
 
 func handleGetLines(writer http.ResponseWriter, request *http.Request, store LineStore) {
-	lines, err := store.ListLines(request.Context())
+	sinceValue := request.URL.Query().Get("since")
+
+	var (
+		lines []Line
+		err   error
+	)
+
+	if sinceValue == "" {
+		lines, err = store.ListLines(request.Context())
+	} else {
+		sinceID, parseErr := strconv.Atoi(sinceValue)
+		if parseErr != nil || sinceID < 0 {
+			writeJSONError(writer, http.StatusBadRequest, "since must be a non-negative integer")
+			return
+		}
+
+		lines, err = store.ListLinesSince(request.Context(), sinceID)
+	}
+
 	if err != nil {
 		log.Printf("list lines failed: %v", err)
 		writeJSONError(writer, http.StatusInternalServerError, "failed to list lines")

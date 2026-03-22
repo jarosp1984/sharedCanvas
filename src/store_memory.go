@@ -52,3 +52,17 @@ func (store *MemoryLineStore) ListLines(_ context.Context) ([]Line, error) {
 
 	return lines, nil
 }
+
+func (store *MemoryLineStore) ListLinesSince(_ context.Context, sinceID int) ([]Line, error) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+
+	lines := make([]Line, 0, len(store.lines))
+	for _, line := range store.lines {
+		if line.ID > sinceID {
+			lines = append(lines, line)
+		}
+	}
+
+	return lines, nil
+}
