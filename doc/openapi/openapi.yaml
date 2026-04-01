@@ -134,6 +134,35 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
               example:
                 error: failed to save line
+  /api/lines/clear:
+    post:
+      tags:
+        - lines
+      summary: Clear all line segments
+      description: |
+        Removes all stored line segments from the shared canvas.
+
+        This operation is destructive and affects all connected clients.
+      operationId: clearLines
+      responses:
+        '204':
+          description: Lines cleared successfully
+        '405':
+          description: Method not allowed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: method must be POST
+        '500':
+          description: The server failed to clear lines
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: failed to clear lines
 components:
   schemas:
     Line:
