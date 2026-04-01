@@ -192,3 +192,84 @@ func TestGetLinesSinceRejectsInvalidValue(t *testing.T) {
 		t.Fatalf("expected validation error in response, got %s", response.Body.String())
 	}
 }
+
+func TestClearLinesRemovesStoredLines(t *testing.T) {
+	store := NewMemoryLineStore()
+	linesHandler := NewLinesHandler(store)
+	clearHandler := NewClearLinesHandler(store)
+
+	for i := 0; i < 2; i++ {
+		postReq := httptest.NewRequest(http.MethodPost, "/api/lines", strings.NewReader(`{"x1":10,"y1":20,"x2":30,"y2":40,"color":"#112233","width":5}`))
+		postResp := httptest.NewRecorder()
+		linesHandler.ServeHTTP(postResp, postReq)
+
+		if postResp.Code != http.StatusCreated {
+			t.Fatalf("failed to post line: %d", postResp.Code)
+		}
+	}
+
+	clearReq := httptest.NewRequest(http.MethodPost, "/api/lines/clear", nil)
+	clearResp := httptest.NewRecorder()
+	clearHandler.ServeHTTP(clearResp, clearReq)
+
+	if clearResp.Code != http.StatusNoContent {
+		t.Fatalf("expected status %d, got %d", http.StatusNoContent, clearResp.Code)
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/lines", nil)
+	getResp := httptest.NewRecorder()
+	linesHandler.ServeHTTP(getResp, getReq)
+
+	if getResp.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, getResp.Code)
+	}
+
+	if !strings.Contains(getResp.Body.String(), `"data":[]`) {
+		t.Fatalf("expected empty data array after clear, got %s", getResp.Body.String())
+	}
+}
+
+func TestClearLinesRejectsNonPostMethod(t *testing.T) {
+	store := NewMemoryLineStore()
+	handler := NewClearLinesHandler(store)
+
+	request := httptest.NewRequest(http.MethodGet, "/api/lines/clear", nil)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected status %d, got %d", http.StatusMethodNotAllowed, response.Code)
+	}
+}
+
+func TestClearLinesPreservesMonotonicIDs(t *testing.T) {
+	store := NewMemoryLineStore()
+	linesHandler := NewLinesHandler(store)
+	clearHandler := NewClearLinesHandler(store)
+
+	firstPostReq := httptest.NewRequest(http.MethodPost, "/api/lines", strings.NewReader(`{"x1":10,"y1":20,"x2":30,"y2":40,"color":"#112233","width":5}`))
+	firstPostResp := httptest.NewRecorder()
+	linesHandler.ServeHTTP(firstPostResp, firstPostReq)
+	if firstPostResp.Code != http.StatusCreated {
+		t.Fatalf("failed to post first line: %d", firstPostResp.Code)
+	}
+
+	clearReq := httptest.NewRequest(http.MethodPost, "/api/lines/clear", nil)
+	clearResp := httptest.NewRecorder()
+	clearHandler.ServeHTTP(clearResp, clearReq)
+	if clearResp.Code != http.StatusNoContent {
+		t.Fatalf("expected status %d, got %d", http.StatusNoContent, clearResp.Code)
+	}
+
+	secondPostReq := httptest.NewRequest(http.MethodPost, "/api/lines", strings.NewReader(`{"x1":15,"y1":25,"x2":35,"y2":45,"color":"#112233","width":5}`))
+	secondPostResp := httptest.NewRecorder()
+	linesHandler.ServeHTTP(secondPostResp, secondPostReq)
+	if secondPostResp.Code != http.StatusCreated {
+		t.Fatalf("failed to post second line: %d", secondPostResp.Code)
+	}
+
+	if !strings.Contains(secondPostResp.Body.String(), `"id":2`) {
+		t.Fatalf("expected second line id to be 2 after clear, got %s", secondPostResp.Body.String())
+	}
+}

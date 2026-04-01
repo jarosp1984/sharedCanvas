@@ -86,3 +86,11 @@ func (store *RedisLineStore) ListLinesSince(ctx context.Context, sinceID int) ([
 
 	return filtered, nil
 }
+
+func (store *RedisLineStore) ClearLines(ctx context.Context) error {
+	if err := store.client.Del(ctx, redisLinesKey).Err(); err != nil {
+		return fmt.Errorf("clear lines: %w", err)
+	}
+
+	return nil
+}

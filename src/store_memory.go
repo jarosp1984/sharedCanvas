@@ -66,3 +66,12 @@ func (store *MemoryLineStore) ListLinesSince(_ context.Context, sinceID int) ([]
 
 	return lines, nil
 }
+
+func (store *MemoryLineStore) ClearLines(_ context.Context) error {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+
+	store.lines = nil
+
+	return nil
+}

@@ -132,9 +132,28 @@
             sizeDisplay.textContent = e.target.value;
         });
 
-        // Clear canvas
-        clearBtn.addEventListener('click', () => {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // Clear canvas for all clients via backend state.
+        clearBtn.addEventListener('click', async () => {
+            const confirmed = window.confirm('Clear canvas for everyone?');
+            if (!confirmed) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/lines/clear', {
+                    method: 'POST'
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API request failed with status ${response.status}`);
+                }
+
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                hasReportedApiError = false;
+            } catch (error) {
+                console.error('Failed to clear canvas:', error);
+                alert('Could not clear canvas. Please try again.');
+            }
         });
 
         function drawLineSegment(x1, y1, x2, y2, color, width) {
@@ -226,6 +245,20 @@
                 const payload = await response.json();
                 const lines = Array.isArray(payload.data) ? payload.data : [];
                 if (lines.length === 0) {
+                    if (maxRenderedLineID > 0) {
+                        const fullResponse = await fetch('/api/lines', {
+                            method: 'GET'
+                        });
+
+                        if (fullResponse.ok) {
+                            const fullPayload = await fullResponse.json();
+                            const fullLines = Array.isArray(fullPayload.data) ? fullPayload.data : [];
+                            if (fullLines.length === 0) {
+                                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                            }
+                        }
+                    }
+
                     return;
                 }
 

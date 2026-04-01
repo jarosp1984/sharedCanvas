@@ -15,6 +15,7 @@ type LineStore interface {
 	ListLines(ctx context.Context) ([]Line, error)
 	ListLinesSince(ctx context.Context, sinceID int) ([]Line, error)
 	NextLineID(ctx context.Context) (int, error)
+	ClearLines(ctx context.Context) error
 }
 
 func NewLineStoreFromEnv(ctx context.Context) (LineStore, error) {

@@ -22,6 +22,17 @@ func NewLinesHandler(store LineStore) http.HandlerFunc {
 	}
 }
 
+func NewClearLinesHandler(store LineStore) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodPost {
+			writeJSONError(writer, http.StatusMethodNotAllowed, "method must be POST")
+			return
+		}
+
+		handleClearLines(writer, request, store)
+	}
+}
+
 func handlePostLine(writer http.ResponseWriter, request *http.Request, store LineStore) {
 	request.Body = http.MaxBytesReader(writer, request.Body, 1<<20)
 
@@ -85,6 +96,16 @@ func handleGetLines(writer http.ResponseWriter, request *http.Request, store Lin
 		"status": "ok",
 		"data":   lines,
 	})
+}
+
+func handleClearLines(writer http.ResponseWriter, request *http.Request, store LineStore) {
+	if err := store.ClearLines(request.Context()); err != nil {
+		log.Printf("clear lines failed: %v", err)
+		writeJSONError(writer, http.StatusInternalServerError, "failed to clear lines")
+		return
+	}
+
+	writer.WriteHeader(http.StatusNoContent)
 }
 
 // Deprecated: use NewLinesHandler instead

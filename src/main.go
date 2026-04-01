@@ -22,6 +22,7 @@ func main() {
 	}
 
 	http.HandleFunc("/api/lines", NewLinesHandler(store))
+	http.HandleFunc("/api/lines/clear", NewClearLinesHandler(store))
 
 	// Serve static files from the src directory
 	fs := http.FileServer(http.Dir("../static"))

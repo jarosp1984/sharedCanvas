@@ -1,3 +1,2 @@
 TODO:
-* clear method
-* auto update with partial data read
+* optimse auto update with partial data read from redis
