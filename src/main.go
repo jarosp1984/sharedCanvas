@@ -7,6 +7,15 @@ import (
 	"os"
 )
 
+func NewServerMux(store LineStore) *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.HandleFunc(sessionPagePathPrefix, NewSessionPageHandler())
+	mux.HandleFunc(apiSessionsPathPrefix, NewSessionAPIHandler(store))
+	mux.HandleFunc("/", NewRootHandler())
+
+	return mux
+}
+
 func main() {
 	ctx := context.Background()
 
@@ -21,17 +30,12 @@ func main() {
 		log.Fatal("Server failed to initialize store:", err)
 	}
 
-	http.HandleFunc("/api/lines", NewLinesHandler(store))
-	http.HandleFunc("/api/lines/clear", NewClearLinesHandler(store))
-
-	// Serve static files from the src directory
-	fs := http.FileServer(http.Dir("../static"))
-	http.Handle("/", fs)
+	server := NewServerMux(store)
 
 	log.Printf("Server starting on http://localhost:%s", port)
 	log.Printf("Open http://localhost:%s in your browser", port)
 
-	if err := http.ListenAndServe(":"+port, nil); err != nil {
+	if err := http.ListenAndServe(":"+port, server); err != nil {
 		log.Fatal("Server failed to start:", err)
 	}
 }

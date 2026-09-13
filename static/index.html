@@ -23,6 +23,7 @@
         .controls {
             margin-bottom: 20px;
             display: flex;
+            flex-wrap: wrap;
             gap: 15px;
             align-items: center;
             background: white;
@@ -83,6 +84,21 @@
             text-align: center;
             color: #666;
         }
+
+        .session-link {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            max-width: 100%;
+        }
+
+        .session-link input {
+            width: 320px;
+            max-width: 50vw;
+            padding: 8px 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
     </style>
 </head>
 <body>
@@ -101,6 +117,12 @@
         </div>
         
         <button id="clearBtn">Clear Canvas</button>
+
+        <div class="session-link">
+            <label for="sessionLink">Session Link:</label>
+            <input type="text" id="sessionLink" readonly>
+            <button id="copySessionBtn" type="button">Copy Link</button>
+        </div>
     </div>
 
     <canvas id="canvas" width="800" height="600"></canvas>
@@ -115,6 +137,8 @@
         const brushSize = document.getElementById('brushSize');
         const sizeDisplay = document.getElementById('sizeDisplay');
         const clearBtn = document.getElementById('clearBtn');
+        const sessionLinkInput = document.getElementById('sessionLink');
+        const copySessionBtn = document.getElementById('copySessionBtn');
 
         // Drawing state
         let isDrawing = false;
@@ -127,9 +151,35 @@
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
 
+        function getSessionIDFromPath(pathname) {
+            const match = pathname.match(/^\/sessions\/([0-9a-fA-F-]+)\/?$/);
+            if (!match) {
+                throw new Error(`Invalid session path: ${pathname}`);
+            }
+
+            return match[1];
+        }
+
+        const sessionID = getSessionIDFromPath(window.location.pathname);
+        const apiBase = `/api/sessions/${sessionID}`;
+        sessionLinkInput.value = window.location.href;
+
         // Update brush size display
         brushSize.addEventListener('input', (e) => {
             sizeDisplay.textContent = e.target.value;
+        });
+
+        copySessionBtn.addEventListener('click', async () => {
+            try {
+                await navigator.clipboard.writeText(window.location.href);
+                copySessionBtn.textContent = 'Copied!';
+                window.setTimeout(() => {
+                    copySessionBtn.textContent = 'Copy Link';
+                }, 1500);
+            } catch (error) {
+                console.error('Failed to copy session link:', error);
+                alert('Could not copy the session link. Please copy it manually.');
+            }
         });
 
         // Clear canvas for all clients via backend state.
@@ -140,7 +190,7 @@
             }
 
             try {
-                const response = await fetch('/api/lines/clear', {
+                const response = await fetch(`${apiBase}/lines/clear`, {
                     method: 'POST'
                 });
 
@@ -168,7 +218,7 @@
 
         async function submitLineSegment(line) {
             try {
-                const response = await fetch('/api/lines', {
+                const response = await fetch(`${apiBase}/lines`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -215,7 +265,7 @@
 
         async function loadStoredLines() {
             try {
-                const response = await fetch('/api/lines', {
+                const response = await fetch(`${apiBase}/lines`, {
                     method: 'GET'
                 });
 
@@ -234,7 +284,7 @@
 
         async function pollNewLines() {
             try {
-                const response = await fetch(`/api/lines?since=${maxRenderedLineID}`, {
+                const response = await fetch(`${apiBase}/lines?since=${maxRenderedLineID}`, {
                     method: 'GET'
                 });
 
@@ -246,7 +296,7 @@
                 const lines = Array.isArray(payload.data) ? payload.data : [];
                 if (lines.length === 0) {
                     if (maxRenderedLineID > 0) {
-                        const fullResponse = await fetch('/api/lines', {
+                        const fullResponse = await fetch(`${apiBase}/lines`, {
                             method: 'GET'
                         });
 

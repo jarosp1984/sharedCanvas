@@ -11,11 +11,11 @@ import (
 )
 
 type LineStore interface {
-	SaveLine(ctx context.Context, line *Line) error
-	ListLines(ctx context.Context) ([]Line, error)
-	ListLinesSince(ctx context.Context, sinceID int) ([]Line, error)
-	NextLineID(ctx context.Context) (int, error)
-	ClearLines(ctx context.Context) error
+	SaveLine(ctx context.Context, sessionID string, line *Line) error
+	ListLines(ctx context.Context, sessionID string) ([]Line, error)
+	ListLinesSince(ctx context.Context, sessionID string, sinceID int) ([]Line, error)
+	NextLineID(ctx context.Context, sessionID string) (int, error)
+	ClearLines(ctx context.Context, sessionID string) error
 }
 
 func NewLineStoreFromEnv(ctx context.Context) (LineStore, error) {
