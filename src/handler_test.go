@@ -4,24 +4,51 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 )
 
-func TestCreateLineHandlerStoresValidLine(t *testing.T) {
+const (
+	testSessionID      = "11111111-1111-4111-8111-111111111111"
+	otherTestSessionID = "22222222-2222-4222-8222-222222222222"
+)
+
+func newTestServer() (*MemoryLineStore, http.Handler) {
 	store := NewMemoryLineStore()
-	handler := NewCreateLineHandler(store)
 
-	request := httptest.NewRequest(http.MethodPost, "/api/lines", strings.NewReader(`{"x1":10,"y1":20,"x2":30,"y2":40,"color":"#112233","width":5}`))
+	return store, NewServerMux(store)
+}
+
+func performRequest(handler http.Handler, method string, path string, body string) *httptest.ResponseRecorder {
+	request := httptest.NewRequest(method, path, strings.NewReader(body))
 	response := httptest.NewRecorder()
-
 	handler.ServeHTTP(response, request)
 
+	return response
+}
+
+func linesPath(sessionID string) string {
+	return "/api/sessions/" + sessionID + "/lines"
+}
+
+func clearLinesPath(sessionID string) string {
+	return "/api/sessions/" + sessionID + "/lines/clear"
+}
+
+func validLineJSON() string {
+	return `{"x1":10,"y1":20,"x2":30,"y2":40,"color":"#112233","width":5}`
+}
+
+func TestSessionLinesHandlerStoresValidLine(t *testing.T) {
+	store, handler := newTestServer()
+
+	response := performRequest(handler, http.MethodPost, linesPath(testSessionID), validLineJSON())
 	if response.Code != http.StatusCreated {
 		t.Fatalf("expected status %d, got %d", http.StatusCreated, response.Code)
 	}
 
-	lines, err := store.ListLines(context.Background())
+	lines, err := store.ListLines(context.Background(), testSessionID)
 	if err != nil {
 		t.Fatalf("list lines returned error: %v", err)
 	}
@@ -39,44 +66,41 @@ func TestCreateLineHandlerStoresValidLine(t *testing.T) {
 	}
 }
 
-func TestCreateLineHandlerRejectsInvalidLine(t *testing.T) {
-	store := NewMemoryLineStore()
-	handler := NewCreateLineHandler(store)
+func TestSessionLinesHandlerRejectsInvalidLine(t *testing.T) {
+	_, handler := newTestServer()
 
-	request := httptest.NewRequest(http.MethodPost, "/api/lines", strings.NewReader(`{"x1":-1,"y1":20,"x2":30,"y2":40,"color":"#112233","width":5}`))
-	response := httptest.NewRecorder()
-
-	handler.ServeHTTP(response, request)
-
+	response := performRequest(handler, http.MethodPost, linesPath(testSessionID), `{"x1":-1,"y1":20,"x2":30,"y2":40,"color":"#112233","width":5}`)
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, response.Code)
 	}
 }
 
-func TestCreateLineHandlerRejectsWrongMethod(t *testing.T) {
-	store := NewMemoryLineStore()
-	handler := NewCreateLineHandler(store)
+func TestSessionLinesHandlerRejectsInvalidSessionID(t *testing.T) {
+	_, handler := newTestServer()
 
-	// GET should now be accepted (not rejected) since we merged POST and GET handlers
-	request := httptest.NewRequest(http.MethodGet, "/api/lines", nil)
-	response := httptest.NewRecorder()
+	response := performRequest(handler, http.MethodGet, linesPath("not-a-uuid"), "")
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, response.Code)
+	}
 
-	handler.ServeHTTP(response, request)
-
-	if response.Code != http.StatusOK {
-		t.Fatalf("expected status %d (GET now supported), got %d", http.StatusOK, response.Code)
+	if !strings.Contains(response.Body.String(), `"error":"session_id must be a valid UUID"`) {
+		t.Fatalf("expected invalid session id error, got %s", response.Body.String())
 	}
 }
 
-func TestGetLinesReturnsEmptyArray(t *testing.T) {
-	store := NewMemoryLineStore()
-	handler := NewLinesHandler(store)
+func TestSessionLinesHandlerRejectsWrongMethod(t *testing.T) {
+	_, handler := newTestServer()
 
-	request := httptest.NewRequest(http.MethodGet, "/api/lines", nil)
-	response := httptest.NewRecorder()
+	response := performRequest(handler, http.MethodDelete, linesPath(testSessionID), "")
+	if response.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected status %d, got %d", http.StatusMethodNotAllowed, response.Code)
+	}
+}
 
-	handler.ServeHTTP(response, request)
+func TestGetLinesReturnsEmptyArrayPerSession(t *testing.T) {
+	_, handler := newTestServer()
 
+	response := performRequest(handler, http.MethodGet, linesPath(testSessionID), "")
 	if response.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, response.Code)
 	}
@@ -86,104 +110,82 @@ func TestGetLinesReturnsEmptyArray(t *testing.T) {
 	}
 }
 
-func TestGetLinesReturnsStoredLines(t *testing.T) {
-	store := NewMemoryLineStore()
-	handler := NewLinesHandler(store)
+func TestSessionLinesAreIsolatedBetweenSessions(t *testing.T) {
+	_, handler := newTestServer()
 
-	// POST two lines
+	postResponse := performRequest(handler, http.MethodPost, linesPath(testSessionID), validLineJSON())
+	if postResponse.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d", http.StatusCreated, postResponse.Code)
+	}
+
+	getOtherResponse := performRequest(handler, http.MethodGet, linesPath(otherTestSessionID), "")
+	if getOtherResponse.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, getOtherResponse.Code)
+	}
+
+	if !strings.Contains(getOtherResponse.Body.String(), `"data":[]`) {
+		t.Fatalf("expected other session to be empty, got %s", getOtherResponse.Body.String())
+	}
+}
+
+func TestGetLinesReturnsStoredLinesForSession(t *testing.T) {
+	_, handler := newTestServer()
+
 	for i := 0; i < 2; i++ {
-		postReq := httptest.NewRequest(http.MethodPost, "/api/lines", strings.NewReader(`{"x1":10,"y1":20,"x2":30,"y2":40,"color":"#112233","width":5}`))
-		postResp := httptest.NewRecorder()
-		handler.ServeHTTP(postResp, postReq)
-
-		if postResp.Code != http.StatusCreated {
-			t.Fatalf("failed to post line: %d", postResp.Code)
+		postResponse := performRequest(handler, http.MethodPost, linesPath(testSessionID), validLineJSON())
+		if postResponse.Code != http.StatusCreated {
+			t.Fatalf("failed to post line: %d", postResponse.Code)
 		}
 	}
 
-	// GET the lines
-	getReq := httptest.NewRequest(http.MethodGet, "/api/lines", nil)
-	getResp := httptest.NewRecorder()
-
-	handler.ServeHTTP(getResp, getReq)
-
-	if getResp.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, getResp.Code)
+	getResponse := performRequest(handler, http.MethodGet, linesPath(testSessionID), "")
+	if getResponse.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, getResponse.Code)
 	}
 
-	if !strings.Contains(getResp.Body.String(), `"status":"ok"`) {
-		t.Fatalf("expected status ok in response, got %s", getResp.Body.String())
+	if !strings.Contains(getResponse.Body.String(), `"id":1`) {
+		t.Fatalf("expected line id 1 in response, got %s", getResponse.Body.String())
 	}
 
-	if !strings.Contains(getResp.Body.String(), `"id":1`) {
-		t.Fatalf("expected line id 1 in response, got %s", getResp.Body.String())
-	}
-
-	if !strings.Contains(getResp.Body.String(), `"id":2`) {
-		t.Fatalf("expected line id 2 in response, got %s", getResp.Body.String())
+	if !strings.Contains(getResponse.Body.String(), `"id":2`) {
+		t.Fatalf("expected line id 2 in response, got %s", getResponse.Body.String())
 	}
 }
 
-func TestGetLinesRejectsNonGetMethod(t *testing.T) {
-	store := NewMemoryLineStore()
-	handler := NewLinesHandler(store)
-
-	request := httptest.NewRequest("DELETE", "/api/lines", nil)
-	response := httptest.NewRecorder()
-
-	handler.ServeHTTP(response, request)
-
-	if response.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("expected status %d, got %d", http.StatusMethodNotAllowed, response.Code)
-	}
-}
-
-func TestGetLinesSinceReturnsOnlyNewerLines(t *testing.T) {
-	store := NewMemoryLineStore()
-	handler := NewLinesHandler(store)
+func TestGetLinesSinceReturnsOnlyNewerLinesWithinSession(t *testing.T) {
+	_, handler := newTestServer()
 
 	for i := 0; i < 3; i++ {
-		postReq := httptest.NewRequest(http.MethodPost, "/api/lines", strings.NewReader(`{"x1":10,"y1":20,"x2":30,"y2":40,"color":"#112233","width":5}`))
-		postResp := httptest.NewRecorder()
-		handler.ServeHTTP(postResp, postReq)
-
-		if postResp.Code != http.StatusCreated {
-			t.Fatalf("failed to post line: %d", postResp.Code)
+		postResponse := performRequest(handler, http.MethodPost, linesPath(testSessionID), validLineJSON())
+		if postResponse.Code != http.StatusCreated {
+			t.Fatalf("failed to post line: %d", postResponse.Code)
 		}
 	}
 
-	getReq := httptest.NewRequest(http.MethodGet, "/api/lines?since=1", nil)
-	getResp := httptest.NewRecorder()
-
-	handler.ServeHTTP(getResp, getReq)
-
-	if getResp.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, getResp.Code)
+	otherPostResponse := performRequest(handler, http.MethodPost, linesPath(otherTestSessionID), validLineJSON())
+	if otherPostResponse.Code != http.StatusCreated {
+		t.Fatalf("failed to post line to other session: %d", otherPostResponse.Code)
 	}
 
-	body := getResp.Body.String()
+	getResponse := performRequest(handler, http.MethodGet, linesPath(testSessionID)+"?since=1", "")
+	if getResponse.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, getResponse.Code)
+	}
+
+	body := getResponse.Body.String()
 	if strings.Contains(body, `"id":1`) {
 		t.Fatalf("expected id 1 to be filtered out, got %s", body)
 	}
 
-	if !strings.Contains(body, `"id":2`) {
-		t.Fatalf("expected id 2 in response, got %s", body)
-	}
-
-	if !strings.Contains(body, `"id":3`) {
-		t.Fatalf("expected id 3 in response, got %s", body)
+	if !strings.Contains(body, `"id":2`) || !strings.Contains(body, `"id":3`) {
+		t.Fatalf("expected ids 2 and 3 in response, got %s", body)
 	}
 }
 
 func TestGetLinesSinceRejectsInvalidValue(t *testing.T) {
-	store := NewMemoryLineStore()
-	handler := NewLinesHandler(store)
+	_, handler := newTestServer()
 
-	request := httptest.NewRequest(http.MethodGet, "/api/lines?since=-1", nil)
-	response := httptest.NewRecorder()
-
-	handler.ServeHTTP(response, request)
-
+	response := performRequest(handler, http.MethodGet, linesPath(testSessionID)+"?since=-1", "")
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, response.Code)
 	}
@@ -193,83 +195,113 @@ func TestGetLinesSinceRejectsInvalidValue(t *testing.T) {
 	}
 }
 
-func TestClearLinesRemovesStoredLines(t *testing.T) {
-	store := NewMemoryLineStore()
-	linesHandler := NewLinesHandler(store)
-	clearHandler := NewClearLinesHandler(store)
+func TestClearLinesRemovesOnlyTargetSessionLines(t *testing.T) {
+	_, handler := newTestServer()
 
-	for i := 0; i < 2; i++ {
-		postReq := httptest.NewRequest(http.MethodPost, "/api/lines", strings.NewReader(`{"x1":10,"y1":20,"x2":30,"y2":40,"color":"#112233","width":5}`))
-		postResp := httptest.NewRecorder()
-		linesHandler.ServeHTTP(postResp, postReq)
-
-		if postResp.Code != http.StatusCreated {
-			t.Fatalf("failed to post line: %d", postResp.Code)
+	for _, sessionID := range []string{testSessionID, otherTestSessionID} {
+		for i := 0; i < 2; i++ {
+			postResponse := performRequest(handler, http.MethodPost, linesPath(sessionID), validLineJSON())
+			if postResponse.Code != http.StatusCreated {
+				t.Fatalf("failed to post line: %d", postResponse.Code)
+			}
 		}
 	}
 
-	clearReq := httptest.NewRequest(http.MethodPost, "/api/lines/clear", nil)
-	clearResp := httptest.NewRecorder()
-	clearHandler.ServeHTTP(clearResp, clearReq)
-
-	if clearResp.Code != http.StatusNoContent {
-		t.Fatalf("expected status %d, got %d", http.StatusNoContent, clearResp.Code)
+	clearResponse := performRequest(handler, http.MethodPost, clearLinesPath(testSessionID), "")
+	if clearResponse.Code != http.StatusNoContent {
+		t.Fatalf("expected status %d, got %d", http.StatusNoContent, clearResponse.Code)
 	}
 
-	getReq := httptest.NewRequest(http.MethodGet, "/api/lines", nil)
-	getResp := httptest.NewRecorder()
-	linesHandler.ServeHTTP(getResp, getReq)
-
-	if getResp.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, getResp.Code)
+	getClearedResponse := performRequest(handler, http.MethodGet, linesPath(testSessionID), "")
+	if !strings.Contains(getClearedResponse.Body.String(), `"data":[]`) {
+		t.Fatalf("expected cleared session to be empty, got %s", getClearedResponse.Body.String())
 	}
 
-	if !strings.Contains(getResp.Body.String(), `"data":[]`) {
-		t.Fatalf("expected empty data array after clear, got %s", getResp.Body.String())
+	getOtherResponse := performRequest(handler, http.MethodGet, linesPath(otherTestSessionID), "")
+	if !strings.Contains(getOtherResponse.Body.String(), `"id":1`) || !strings.Contains(getOtherResponse.Body.String(), `"id":2`) {
+		t.Fatalf("expected other session lines to remain, got %s", getOtherResponse.Body.String())
 	}
 }
 
 func TestClearLinesRejectsNonPostMethod(t *testing.T) {
-	store := NewMemoryLineStore()
-	handler := NewClearLinesHandler(store)
+	_, handler := newTestServer()
 
-	request := httptest.NewRequest(http.MethodGet, "/api/lines/clear", nil)
-	response := httptest.NewRecorder()
-
-	handler.ServeHTTP(response, request)
-
+	response := performRequest(handler, http.MethodGet, clearLinesPath(testSessionID), "")
 	if response.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("expected status %d, got %d", http.StatusMethodNotAllowed, response.Code)
 	}
 }
 
-func TestClearLinesPreservesMonotonicIDs(t *testing.T) {
-	store := NewMemoryLineStore()
-	linesHandler := NewLinesHandler(store)
-	clearHandler := NewClearLinesHandler(store)
+func TestClearLinesPreservesMonotonicIDsPerSession(t *testing.T) {
+	_, handler := newTestServer()
 
-	firstPostReq := httptest.NewRequest(http.MethodPost, "/api/lines", strings.NewReader(`{"x1":10,"y1":20,"x2":30,"y2":40,"color":"#112233","width":5}`))
-	firstPostResp := httptest.NewRecorder()
-	linesHandler.ServeHTTP(firstPostResp, firstPostReq)
-	if firstPostResp.Code != http.StatusCreated {
-		t.Fatalf("failed to post first line: %d", firstPostResp.Code)
+	firstPostResponse := performRequest(handler, http.MethodPost, linesPath(testSessionID), validLineJSON())
+	if firstPostResponse.Code != http.StatusCreated {
+		t.Fatalf("failed to post first line: %d", firstPostResponse.Code)
 	}
 
-	clearReq := httptest.NewRequest(http.MethodPost, "/api/lines/clear", nil)
-	clearResp := httptest.NewRecorder()
-	clearHandler.ServeHTTP(clearResp, clearReq)
-	if clearResp.Code != http.StatusNoContent {
-		t.Fatalf("expected status %d, got %d", http.StatusNoContent, clearResp.Code)
+	clearResponse := performRequest(handler, http.MethodPost, clearLinesPath(testSessionID), "")
+	if clearResponse.Code != http.StatusNoContent {
+		t.Fatalf("expected status %d, got %d", http.StatusNoContent, clearResponse.Code)
 	}
 
-	secondPostReq := httptest.NewRequest(http.MethodPost, "/api/lines", strings.NewReader(`{"x1":15,"y1":25,"x2":35,"y2":45,"color":"#112233","width":5}`))
-	secondPostResp := httptest.NewRecorder()
-	linesHandler.ServeHTTP(secondPostResp, secondPostReq)
-	if secondPostResp.Code != http.StatusCreated {
-		t.Fatalf("failed to post second line: %d", secondPostResp.Code)
+	secondPostResponse := performRequest(handler, http.MethodPost, linesPath(testSessionID), `{"x1":15,"y1":25,"x2":35,"y2":45,"color":"#112233","width":5}`)
+	if secondPostResponse.Code != http.StatusCreated {
+		t.Fatalf("failed to post second line: %d", secondPostResponse.Code)
 	}
 
-	if !strings.Contains(secondPostResp.Body.String(), `"id":2`) {
-		t.Fatalf("expected second line id to be 2 after clear, got %s", secondPostResp.Body.String())
+	if !strings.Contains(secondPostResponse.Body.String(), `"id":2`) {
+		t.Fatalf("expected second line id to be 2 after clear, got %s", secondPostResponse.Body.String())
+	}
+}
+
+func TestLineIDsStartAtOnePerSession(t *testing.T) {
+	_, handler := newTestServer()
+
+	firstSessionResponse := performRequest(handler, http.MethodPost, linesPath(testSessionID), validLineJSON())
+	if !strings.Contains(firstSessionResponse.Body.String(), `"id":1`) {
+		t.Fatalf("expected first session to start at id 1, got %s", firstSessionResponse.Body.String())
+	}
+
+	secondSessionResponse := performRequest(handler, http.MethodPost, linesPath(otherTestSessionID), validLineJSON())
+	if !strings.Contains(secondSessionResponse.Body.String(), `"id":1`) {
+		t.Fatalf("expected second session to start at id 1, got %s", secondSessionResponse.Body.String())
+	}
+}
+
+func TestRootRedirectsToNewSession(t *testing.T) {
+	_, handler := newTestServer()
+
+	response := performRequest(handler, http.MethodGet, "/", "")
+	if response.Code != http.StatusSeeOther {
+		t.Fatalf("expected status %d, got %d", http.StatusSeeOther, response.Code)
+	}
+
+	location := response.Header().Get("Location")
+	pattern := regexp.MustCompile(`^/sessions/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
+	if !pattern.MatchString(location) {
+		t.Fatalf("expected redirect to session path, got %q", location)
+	}
+}
+
+func TestSessionPageServesCanvasForValidSession(t *testing.T) {
+	_, handler := newTestServer()
+
+	response := performRequest(handler, http.MethodGet, "/sessions/"+testSessionID, "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, response.Code)
+	}
+
+	if !strings.Contains(response.Body.String(), "Shared Canvas - Paint Tool") {
+		t.Fatalf("expected HTML canvas page, got %s", response.Body.String())
+	}
+}
+
+func TestSessionPageRejectsInvalidSessionID(t *testing.T) {
+	_, handler := newTestServer()
+
+	response := performRequest(handler, http.MethodGet, "/sessions/not-a-uuid", "")
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("expected status %d, got %d", http.StatusNotFound, response.Code)
 	}
 }

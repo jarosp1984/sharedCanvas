@@ -11,16 +11,25 @@ servers:
     description: Local development server
 tags:
   - name: lines
-    description: Create line segments on the shared canvas
+    description: Create line segments on a shared canvas session
 paths:
-  /api/lines:
+  /api/sessions/{sessionId}/lines:
     get:
       tags:
         - lines
-      summary: List all line segments
+      summary: List all line segments in a session
       description: |
-        Retrieves all stored line segments in insertion order.
+        Retrieves all stored line segments in insertion order for the selected session.
       operationId: listLines
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - name: since
+          in: query
+          required: false
+          description: Return only line segments with an ID greater than this value.
+          schema:
+            type: integer
+            minimum: 0
       responses:
         '200':
           description: Lines retrieved successfully
@@ -58,19 +67,21 @@ paths:
     post:
       tags:
         - lines
-      summary: Create a line segment
+      summary: Create a line segment in a session
       description: |
-        Stores a single line segment.
+        Stores a single line segment in the selected session.
 
         The request body must contain exactly one JSON object. Unknown fields are
         rejected, and the request body is limited to 1 MiB.
       operationId: createLine
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Line'
+              $ref: '#/components/schemas/NewLine'
             examples:
               basic:
                 summary: Valid line segment
@@ -106,6 +117,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
               examples:
+                invalidSessionId:
+                  summary: Invalid session UUID
+                  value:
+                    error: session_id must be a valid UUID
                 invalidJson:
                   summary: Malformed JSON or unknown fields
                   value:
@@ -134,19 +149,29 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
               example:
                 error: failed to save line
-  /api/lines/clear:
+  /api/sessions/{sessionId}/lines/clear:
     post:
       tags:
         - lines
-      summary: Clear all line segments
+      summary: Clear all line segments in a session
       description: |
-        Removes all stored line segments from the shared canvas.
+        Removes all stored line segments from the selected shared canvas session.
 
-        This operation is destructive and affects all connected clients.
+        This operation is destructive and affects all connected clients in that session.
       operationId: clearLines
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
       responses:
         '204':
           description: Lines cleared successfully
+        '400':
+          description: Invalid session UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: session_id must be a valid UUID
         '405':
           description: Method not allowed
           content:
@@ -164,7 +189,57 @@ paths:
               example:
                 error: failed to clear lines
 components:
+  parameters:
+    SessionID:
+      name: sessionId
+      in: path
+      required: true
+      description: Canonical UUID that identifies the shared canvas session.
+      schema:
+        type: string
+        pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$'
   schemas:
+    NewLine:
+      type: object
+      additionalProperties: false
+      required:
+        - x1
+        - y1
+        - x2
+        - y2
+        - color
+        - width
+      properties:
+        x1:
+          type: integer
+          minimum: 0
+          maximum: 800
+          description: Starting X coordinate on the canvas
+        y1:
+          type: integer
+          minimum: 0
+          maximum: 600
+          description: Starting Y coordinate on the canvas
+        x2:
+          type: integer
+          minimum: 0
+          maximum: 800
+          description: Ending X coordinate on the canvas
+        y2:
+          type: integer
+          minimum: 0
+          maximum: 600
+          description: Ending Y coordinate on the canvas
+        color:
+          type: string
+          pattern: '^#[0-9a-fA-F]{6}$'
+          description: Line color as a 6-digit hexadecimal RGB value
+          example: '#112233'
+        width:
+          type: integer
+          minimum: 1
+          maximum: 50
+          description: Stroke width in pixels
     Line:
       type: object
       additionalProperties: false
